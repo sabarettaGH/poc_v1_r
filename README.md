@@ -8,7 +8,7 @@
 
 Puedes probar la versión funcional e interactiva del prototipo directamente desde tu navegador, sin necesidad de instalaciones:
 
-👉 **[Probar NutriTrace (GitHub Pages)](<(https://sabarettagh.github.io/poc_v1_r/pocv3_r.html)>)**
+👉 **[Probar NutriTrace (GitHub Pages)](pocv3_r.html)**
 
 ---
 
