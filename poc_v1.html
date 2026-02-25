@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NutriTrace - POC Master-Detail</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = { theme: { extend: { colors: { primary: '#1F3A5F', secondary: '#2E5E8A', bglight: '#F4F6F8' } } } }
+    </script>
+    <style>
+        .view-section {
+            display: none;
+            animation: fadeIn 0.2s ease-in-out;
+        }
+
+        .view-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+
+        .tree-line {
+            border-left: 2px solid #cbd5e1;
+            margin-left: 12px;
+            padding-left: 16px;
+            position: relative;
+        }
+
+        .tree-line::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 12px;
+            width: 16px;
+            border-top: 2px solid #cbd5e1;
+        }
+
+        .alert-pulse {
+            animation: pulseRed 2s infinite;
+        }
+
+        @keyframes pulseRed {
+            0% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-bglight flex h-screen overflow-hidden text-gray-800 font-sans relative">
+
+    <div id="toast"
+        class="fixed top-5 right-5 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full opacity-0 z-[100] flex items-center">
+        <i class="fas fa-check-circle mr-2"></i> <span id="toast-msg">Acción exitosa</span>
+    </div>
+
+    <div id="crud-modal"
+        class="fixed inset-0 bg-slate-900 bg-opacity-50 z-[60] hidden flex items-center justify-center backdrop-blur-sm transition-opacity p-2 sm:p-4">
+        <div
+            class="bg-white rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+            <div
+                class="px-4 sm:px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+                <h3 id="modal-title" class="text-base sm:text-lg font-bold text-gray-800">Formulario</h3>
+                <button onclick="closeModal('crud-modal')" class="text-gray-400 hover:text-red-500 transition"><i
+                        class="fas fa-times text-xl"></i></button>
+            </div>
+            <form id="crud-form" onsubmit="saveData(event)"
+                class="overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 flex-1">
+                <input type="hidden" id="modal-module">
+                <input type="hidden" id="modal-id">
+
+                <h4 class="font-semibold text-gray-700 border-b pb-2 mb-2 sm:mb-4 text-sm sm:text-base">Datos Generales
+                </h4>
+                <div id="modal-fields" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4"></div>
+
+                <div id="modal-items-container" class="hidden border-t border-gray-200 pt-4 mt-4">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
+                        <h4 class="font-semibold text-gray-700 text-sm sm:text-base">Detalle / Registros Múltiples</h4>
+                        <button type="button" onclick="addDetailRow()"
+                            class="w-full sm:w-auto px-3 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded text-sm font-medium transition"><i
+                                class="fas fa-plus mr-1"></i> Agregar Línea</button>
+                    </div>
+                    <div class="bg-gray-50 rounded border border-gray-200 overflow-hidden overflow-x-auto">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <thead class="bg-gray-100 text-gray-600 border-b" id="items-thead"></thead>
+                            <tbody id="items-tbody" class="divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="audit-footer"
+                    class="hidden mt-6 pt-4 border-t border-gray-100 text-xs text-gray-400 flex items-center">
+                    <i class="fas fa-shield-alt mr-2 text-gray-300"></i>
+                    <span>Registro creado por: <strong>admin@empresa.com.ar</strong> | Última modificación: <span
+                            id="audit-date"></span></span>
+                </div>
+            </form>
+            <div
+                class="px-4 sm:px-6 py-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 shrink-0">
+                <button type="button" onclick="closeModal('crud-modal')"
+                    class="w-full sm:w-auto px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-100 transition font-medium">Cancelar</button>
+                <button type="submit" form="crud-form"
+                    class="w-full sm:w-auto px-4 py-2 bg-primary text-white rounded shadow hover:bg-secondary transition font-medium">Guardar
+                    Registro</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="detail-modal"
+        class="fixed inset-0 bg-slate-900 bg-opacity-50 z-[70] hidden flex items-center justify-center backdrop-blur-sm transition-opacity p-2 sm:p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+                <h3 id="detail-title" class="text-lg font-bold text-primary"><i class="fas fa-list-alt mr-2"></i>
+                    Detalle del Documento</h3>
+                <button onclick="closeModal('detail-modal')" class="text-gray-400 hover:text-red-500 transition"><i
+                        class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1 bg-white">
+                <div id="detail-header"
+                    class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200 text-sm">
+                </div>
+                <h4 class="font-bold text-gray-700 mb-3 border-b pb-2">Desglose de Lotes Materia Prima o Insumo</h4>
+                <div class="border rounded-lg overflow-hidden">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-primary text-white" id="detail-table-head"></thead>
+                        <tbody id="detail-table-body" class="divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end shrink-0">
+                <button onclick="closeModal('detail-modal')"
+                    class="px-5 py-2 bg-gray-200 text-gray-700 rounded shadow-sm hover:bg-gray-300 font-medium">Cerrar
+                    Visor</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sidebar-overlay" onclick="toggleSidebar()"
+        class="fixed inset-0 bg-slate-900 bg-opacity-50 z-20 hidden md:hidden backdrop-blur-sm transition-opacity">
+    </div>
+    <aside id="sidebar"
+        class="fixed md:static inset-y-0 left-0 w-64 bg-primary text-white flex flex-col shadow-2xl md:shadow-xl z-30 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out overflow-y-auto">
+        <div
+            class="h-16 flex items-center justify-between px-6 font-bold text-xl border-b border-secondary/50 shrink-0">
+            <span><i class="fas fa-shield-alt text-blue-400 mr-2"></i> NutriTrace</span><button
+                onclick="toggleSidebar()" class="md:hidden text-gray-300 hover:text-white"><i
+                    class="fas fa-times"></i></button>
+        </div>
+
+        <div class="px-6 py-3 text-xs text-blue-300 font-semibold uppercase tracking-wider mt-2">Operación</div>
+        <nav class="px-4 space-y-1">
+            <button onclick="navigate('dashboard', this)"
+                class="w-full flex items-center px-4 py-3 bg-secondary rounded-lg text-sm font-medium menu-btn active text-white"><i
+                    class="fas fa-chart-pie w-6 text-left opacity-80"></i> Dashboard (Sug.)</button>
+            <button onclick="navigate('recepcion', this)"
+                class="w-full flex items-center px-4 py-3 hover:bg-secondary/50 rounded-lg text-sm font-medium text-gray-300 menu-btn"><i
+                    class="fas fa-truck-loading w-6 text-left opacity-80"></i> Recepciones</button>
+            <button onclick="navigate('elaboracion', this)"
+                class="w-full flex items-center px-4 py-3 hover:bg-secondary/50 rounded-lg text-sm font-medium text-gray-300 menu-btn"><i
+                    class="fas fa-boxes w-6 text-left opacity-80"></i> Lotes de Prod.</button>
+            <button onclick="navigate('despacho', this)"
+                class="w-full flex items-center px-4 py-3 hover:bg-secondary/50 rounded-lg text-sm font-medium text-gray-300 menu-btn"><i
+                    class="fas fa-shipping-fast w-6 text-left opacity-80"></i> Despachos</button>
+        </nav>
+
+        <div
+            class="px-6 py-3 text-xs text-blue-300 font-semibold uppercase tracking-wider mt-4 border-t border-secondary/30 pt-4">
+            Catálogos Centrales</div>
+        <nav class="px-4 space-y-1">
+            <button onclick="navigate('productos', this)"
+                class="w-full flex items-center px-4 py-3 hover:bg-secondary/50 rounded-lg text-sm font-medium text-gray-300 menu-btn"><i
+                    class="fas fa-box-open w-6 text-left opacity-80"></i> Productos</button>
+            <button onclick="navigate('materias', this)"
+                class="w-full flex items-center px-4 py-3 hover:bg-secondary/50 rounded-lg text-sm font-medium text-gray-300 menu-btn"><i
+                    class="fas fa-seedling w-6 text-left opacity-80"></i> Materias Primas</button>
+            <button onclick="navigate('proveedores', this)"
+                class="w-full flex items-center px-4 py-3 hover:bg-secondary/50 rounded-lg text-sm font-medium text-gray-300 menu-btn"><i
+                    class="fas fa-handshake w-6 text-left opacity-80"></i> Proveedores</button>
+            <button onclick="navigate('clientes', this)"
+                class="w-full flex items-center px-4 py-3 hover:bg-secondary/50 rounded-lg text-sm font-medium text-gray-300 menu-btn"><i
+                    class="fas fa-users w-6 text-left opacity-80"></i> Clientes</button>
+        </nav>
+
+        <div
+            class="px-6 py-3 text-xs text-amber-300 font-bold uppercase tracking-wider mt-4 border-t border-secondary/30 pt-4">
+            Control Sanitario</div>
+        <nav class="px-4 space-y-1 mb-6">
+            <button onclick="navigate('trazabilidad', this)"
+                class="w-full flex items-center px-4 py-3 hover:bg-secondary/50 rounded-lg text-sm font-bold text-amber-100 menu-btn border border-transparent hover:border-amber-500/30 transition"><i
+                    class="fas fa-project-diagram w-6 text-left text-amber-400"></i> Trazabilidad 360º</button>
+            <button
+                class="w-full flex items-center px-4 py-3 opacity-40 cursor-not-allowed rounded-lg text-sm font-medium text-gray-300"><i
+                    class="fas fa-search-dollar w-6 text-left"></i> Auditoría Eventos (Sug.)</button>
+        </nav>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden w-full">
+        <header
+            class="h-16 bg-white shadow-sm flex items-center justify-between px-4 sm:px-8 z-40 shrink-0 relative overflow-visible">
+            <div class="flex items-center"><button onclick="toggleSidebar()"
+                    class="md:hidden mr-4 text-gray-500 hover:text-primary focus:outline-none transition"><i
+                        class="fas fa-bars text-xl"></i></button>
+                <h2 id="page-title" class="text-lg sm:text-xl font-semibold text-gray-800 truncate">Dashboard Operativo
+                </h2>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="relative">
+                    <button onclick="toggleUserMenu()"
+                        class="w-9 h-9 rounded-full bg-primary text-white flex items-center justify-center font-bold text-sm shadow hover:ring-2 hover:ring-blue-300 focus:outline-none transition relative z-50">UE</button>
+                    <div id="user-menu"
+                        class="hidden absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-100 z-50 overflow-hidden transform origin-top-right transition-all">
+                        <div class="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                            <p class="text-sm font-semibold text-gray-800">Usuario Empresa</p>
+                            <p class="text-xs text-gray-500 truncate">admin@empresa.com.ar</p>
+                        </div>
+                        <div class="py-1">
+                            <button onclick="accionMenu('Mi Perfil')"
+                                class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary transition flex items-center"><i
+                                    class="fas fa-user w-6 text-center text-gray-400"></i> Mi Perfil</button>
+                            <button onclick="accionMenu('Ajustes del Sistema')"
+                                class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary transition flex items-center"><i
+                                    class="fas fa-cog w-6 text-center text-gray-400"></i> Ajustes</button>
+                            <button onclick="cerrarSesion()"
+                                class="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition flex items-center border-t border-gray-100 mt-1 pt-2 font-medium"><i
+                                    class="fas fa-sign-out-alt w-6 text-center text-red-500"></i> Cerrar Sesión</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-4 sm:p-8 relative z-10" id="main-views-container"></div>
+    </main>
+
+    <script>
+        // UI & Utils
+        function toggleUserMenu() { document.getElementById('user-menu').classList.toggle('hidden'); }
+        window.addEventListener('click', function (e) { const menu = document.getElementById('user-menu'); const btn = menu.previousElementSibling; if (!menu.classList.contains('hidden') && !menu.contains(e.target) && !btn.contains(e.target)) menu.classList.add('hidden'); });
+        function accionMenu(accion) { toggleUserMenu(); showToast(`Sección "${accion}" no disponible.`); }
+        function cerrarSesion() { toggleUserMenu(); if (confirm('¿Desea cerrar sesión y salir?')) { showToast('Cerrando sesión...'); setTimeout(() => { alert('Sesión finalizada.'); }, 1000); } }
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('-translate-x-full'); document.getElementById('sidebar-overlay').classList.toggle('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        // ==========================================
+        // 1. BASE DE DATOS
+        // ==========================================
+        let db = {
+            productos: [
+                { id: 1, nombre: 'Pan de Molde Blanco', categoria: 'Panificados', tipo: 'Producto Final', temperatura_objetiva: '20', vida_util_dias: '15', unidad_medida: 'Unidades' },
+                { id: 2, nombre: 'Masa de Prepizza', categoria: 'Congelados', tipo: 'Semielaborado', temperatura_objetiva: '-18', vida_util_dias: '180', unidad_medida: 'Kg' },
+                { id: 3, nombre: 'Pan Integral Multicereal', categoria: 'Panificados', tipo: 'Producto Final', temperatura_objetiva: '20', vida_util_dias: '10', unidad_medida: 'Unidades' },
+                { id: 4, nombre: 'Bizcochos Dulces', categoria: 'Pastelería', tipo: 'Producto Final', temperatura_objetiva: '22', vida_util_dias: '30', unidad_medida: 'Kg' }
+            ],
+            materias: [
+                { id: 1, categoria: 'Secos', tipo: 'Ingrediente', nombre: 'Harina 000', especificacion: 'Uso Industrial', unidad_medida: 'Kg', temperatura_objetiva: '25', proveedor_id: 1 },
+                { id: 2, categoria: 'Secos', tipo: 'Ingrediente', nombre: 'Levadura Fresca', especificacion: 'Industrial', unidad_medida: 'Kg', temperatura_objetiva: '5', proveedor_id: 2 },
+                { id: 3, categoria: 'Secos', tipo: 'Ingrediente', nombre: 'Sal Fina', especificacion: 'Grado Alimenticio', unidad_medida: 'Kg', temperatura_objetiva: '25', proveedor_id: 2 },
+                { id: 4, categoria: 'Aditivos', tipo: 'Ingrediente', nombre: 'Mejorador Panario', especificacion: 'Panificación', unidad_medida: 'Kg', temperatura_objetiva: '18', proveedor_id: 1 }
+            ],
+            proveedores: [
+                { id: 1, nombre: 'Molinos del Sur S.A.', cuit: '30-71234567-8', direccion: 'Ruta 9 Km 50', telefono: '0341-155443322', email: 'ventas@molinos.com', rubro: 'Harinas y Cereales', estado_habilitacion: '1' },
+                { id: 2, nombre: 'Distribuidora La Dulce', cuit: '33-99887766-5', direccion: 'Parque Ind. Lote 4', telefono: '011-44556677', email: 'info@dulce.com', rubro: 'Insumos Varios', estado_habilitacion: '1' },
+                { id: 3, nombre: 'Empaques del Litoral', cuit: '30-55443322-6', direccion: 'Parque Ind. Norte', telefono: '0341-2223344', email: 'ventas@empaqueslitoral.com', rubro: 'Empaques', estado_habilitacion: '1' }
+            ],
+            clientes: [
+                { id: 1, nombre: 'Supermercados El Sol', cuit: '30-11223344-5', zona: 'Centro', direccion: 'Av. Siempre Viva', numero: '123', mail: 'compras@elsol.com', telefono: '0342-4556677', descripcion: 'Mayorista Regional' },
+                { id: 2, nombre: 'Distribuidora Norte', cuit: '30-99887766-1', zona: 'Norte', direccion: 'Ruta 11', numero: 'S/N', mail: 'logistica@dnorte.com', telefono: '0342-111222', descripcion: 'Centro de Distribución' },
+                { id: 3, nombre: 'Autoservicio La Esquina', cuit: '20-33445566-3', zona: 'Sur', direccion: 'Belgrano', numero: '456', mail: 'compras@laesquina.com', telefono: '0342-2223344', descripcion: 'Minorista de barrio' }
+            ],
+            recepcion: [
+                {
+                    id: 1,
+                    nro_remito: 'REM-102',
+                    fecha_recepcion: '2026-02-19',
+                    estado_recepcion: 'Aceptado',
+                    responsable_recepcion: 'Juan Perez',
+                    observaciones: 'Todo ok',
+                    proveedor_id: 1,
+                    detalles: [
+                        { materia_prima_id: 1, codigo_lote: 'L-889', cantidad_recibida: 500, observaciones: 'Lote principal' },
+                        { materia_prima_id: 4, codigo_lote: 'MEJ-020', cantidad_recibida: 40, observaciones: 'Aditivo panario' }
+                    ]
+                },
+                {
+                    id: 2,
+                    nro_remito: 'REM-105',
+                    fecha_recepcion: '2026-02-20',
+                    estado_recepcion: 'Rechazado',
+                    responsable_recepcion: 'Ana Gomez',
+                    observaciones: 'Empaque roto',
+                    proveedor_id: 2,
+                    detalles: [
+                        { materia_prima_id: 2, codigo_lote: 'LEV-001', cantidad_recibida: 50, observaciones: 'Rechazo por rotura' },
+                        { materia_prima_id: 3, codigo_lote: 'SAL-010', cantidad_recibida: 200, observaciones: 'Ok' }
+                    ]
+                },
+                {
+                    id: 3,
+                    nro_remito: 'REM-110',
+                    fecha_recepcion: '2026-02-22',
+                    estado_recepcion: 'Aceptado',
+                    responsable_recepcion: 'Luis Romero',
+                    observaciones: 'Ingreso parcial',
+                    proveedor_id: 3,
+                    detalles: [
+                        { materia_prima_id: 3, codigo_lote: 'SAL-011', cantidad_recibida: 150, observaciones: 'Sin novedades' },
+                        { materia_prima_id: 1, codigo_lote: 'L-900', cantidad_recibida: 300, observaciones: 'Lote reserva' }
+                    ]
+                }
+            ],
+            elaboracion: [
+                {
+                    id: 1,
+                    codigo_lote: 'LOTE-PAN-1',
+                    fecha_produccion: '2026-02-20',
+                    fecha_vencimiento: '2026-03-05',
+                    responsable: 'Maria Gomez',
+                    cantidad_unidades: 300,
+                    producto_id: 1,
+                    estado: 'Finalizado',
+                    detalles: [
+                        { lote_materia_prima_id: 'L-889 (Harina 000)' },
+                        { lote_materia_prima_id: 'MEJ-020 (Mejorador)' }
+                    ]
+                },
+                {
+                    id: 2,
+                    codigo_lote: 'LOTE-PAN-2',
+                    fecha_produccion: '2026-02-21',
+                    fecha_vencimiento: '2026-03-06',
+                    responsable: 'Maria Gomez',
+                    cantidad_unidades: 280,
+                    producto_id: 3,
+                    estado: 'Finalizado',
+                    detalles: [
+                        { lote_materia_prima_id: 'L-900 (Harina 000)' },
+                        { lote_materia_prima_id: 'SAL-010 (Sal Fina)' }
+                    ]
+                }
+            ],
+            despacho: [
+                {
+                    id: 1,
+                    nro_orden_cc: 'ORD-1001',
+                    transporte: 'Flete Propio',
+                    fecha: '2026-02-21',
+                    cliente_id: 1,
+                    detalles: [
+                        { lote_produccion_id: 1, cantidad: 150 },
+                        { lote_produccion_id: 2, cantidad: 50 }
+                    ]
+                },
+                {
+                    id: 2,
+                    nro_orden_cc: 'ORD-1005',
+                    transporte: 'Logística Sur',
+                    fecha: '2026-02-22',
+                    cliente_id: 2,
+                    detalles: [
+                        { lote_produccion_id: 1, cantidad: 100 }
+                    ]
+                },
+                {
+                    id: 3,
+                    nro_orden_cc: 'ORD-1010',
+                    transporte: 'Flete Tercero',
+                    fecha: '2026-02-23',
+                    cliente_id: 3,
+                    detalles: [
+                        { lote_produccion_id: 2, cantidad: 120 }
+                    ]
+                }
+            ]
+        };
+
+        // ==========================================
+        // 2. CONFIGURACIÓN DE FILTROS
+        // ==========================================
+        const filterConfigs = {
+            recepcion: [{ id: 'f_remito', label: 'Nº Remito', type: 'text' }, { id: 'f_proveedor', label: 'Proveedor', type: 'selectDb', source: 'proveedores', textKey: 'nombre', valKey: 'id' }, { id: 'f_desde', label: 'Fecha Desde', type: 'date' }, { id: 'f_hasta', label: 'Fecha Hasta', type: 'date' }],
+            elaboracion: [{ id: 'f_lote', label: 'Cód. Lote', type: 'text' }, { id: 'f_producto', label: 'Producto', type: 'selectDb', source: 'productos', textKey: 'nombre', valKey: 'id' }, { id: 'f_desde', label: 'Fecha Prod. Desde', type: 'date' }, { id: 'f_hasta', label: 'Fecha Prod. Hasta', type: 'date' }],
+            despacho: [{ id: 'f_orden', label: 'Nº Orden/CC', type: 'text' }, { id: 'f_cliente', label: 'Cliente', type: 'selectDb', source: 'clientes', textKey: 'nombre', valKey: 'id' }, { id: 'f_desde', label: 'Fecha Desp. Desde', type: 'date' }, { id: 'f_hasta', label: 'Fecha Desp. Hasta', type: 'date' }],
+            productos: [{ id: 'f_nombre', label: 'Nombre Producto', type: 'text' }, { id: 'f_categoria', label: 'Categoría', type: 'select', options: ['Congelados', 'Panificados', 'Pastelería', 'Secos'] }, { id: 'f_tipo', label: 'Tipo', type: 'select', options: ['Producto Final', 'Semielaborado', 'Subproducto'] }],
+            materias: [{ id: 'f_nombre', label: 'Nombre M.P.', type: 'text' }, { id: 'f_categoria', label: 'Categoría', type: 'select', options: ['Lácteos', 'Secos', 'Aditivos', 'Empaques'] }, { id: 'f_tipo', label: 'Tipo', type: 'select', options: ['Ingrediente', 'Empaque', 'Aditivo'] }, { id: 'f_proveedor', label: 'Proveedor', type: 'selectDb', source: 'proveedores', textKey: 'nombre', valKey: 'id' }],
+            proveedores: [{ id: 'f_nombre', label: 'Razón Social', type: 'text' }, { id: 'f_cuit', label: 'CUIT', type: 'text' }, { id: 'f_rubro', label: 'Rubro', type: 'select', options: ['Harinas y Cereales', 'Lácteos', 'Empaques', 'Insumos Varios'] }],
+            clientes: [{ id: 'f_nombre', label: 'Razón Social / Nombre', type: 'text' }, { id: 'f_cuit', label: 'CUIT', type: 'text' }, { id: 'f_zona', label: 'Zona/Localidad', type: 'select', options: ['Norte', 'Sur', 'Este', 'Oeste', 'Centro'] }]
+        };
+
+        // ==========================================
+        // 3. GENERACIÓN ESTRATÉGICA DE VISTAS (LAYOUT)
+        // ==========================================
+        const viewDefinitions = {
+            dashboard: { title: 'Dashboard Estratégico', cols: [] },
+            trazabilidad: { title: 'Trazabilidad 360º y Alertas', cols: [] },
+            recepcion: { title: 'Gestión de Recepciones', cols: ['Fecha Rec.', 'Remito', 'Estado', 'Proveedor'] },
+            elaboracion: { title: 'Lotes de Producción', cols: ['Fecha Prod.', 'Cód. Lote', 'Producto', 'Cant. Unid.', 'Estado'] },
+            despacho: { title: 'Despachos Registrados', cols: ['Fecha', 'Orden/CC', 'Transporte', 'Cliente'] },
+            productos: { title: 'Catálogo de Productos', cols: ['Nombre', 'Categoría', 'Tipo', 'Temp. Obj.', 'Vida Útil', 'U.M.'] },
+            materias: { title: 'Diccionario de Insumos', cols: ['Nombre', 'Categoría', 'Tipo', 'Especificación', 'Proveedor Rel.'] },
+            proveedores: { title: 'Padrón de Proveedores', cols: ['Nombre / Razón Social', 'CUIT', 'Tel/Email', 'Rubro', 'Estado Hab.'] },
+            clientes: { title: 'Cartera de Clientes', cols: ['Nombre', 'CUIT', 'Zona', 'Tel/Mail', 'Descripción'] }
+        };
+
+        function initViews() {
+            const container = document.getElementById('main-views-container');
+            container.innerHTML = '';
+            for (let mod in viewDefinitions) {
+                let def = viewDefinitions[mod];
+                let viewHtml = `<div id="${mod}" class="view-section ${mod === 'dashboard' ? 'active' : ''}">`;
+
+                if (mod === 'dashboard') {
+                    viewHtml += `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8"><div class="bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-l-4 border-l-green-500"><p class="text-xs sm:text-sm text-gray-500 font-semibold">% Lotes Conformes</p><p id="kpi-conformes" class="text-2xl sm:text-3xl font-bold text-green-700 mt-1">100%</p></div><div class="bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-l-4 border-l-red-500"><p class="text-xs sm:text-sm text-gray-500 font-semibold">M.P. Rechazadas</p><p id="kpi-bloqueadas" class="text-2xl sm:text-3xl font-bold text-red-600 mt-1">0</p></div><div class="bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-l-4 border-l-yellow-500"><p class="text-xs sm:text-sm text-gray-500 font-semibold">Lotes Anulados</p><p id="kpi-anulados" class="text-2xl sm:text-3xl font-bold text-yellow-600 mt-1">0</p></div><div class="bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-l-4 border-l-blue-500"><p class="text-xs sm:text-sm text-gray-500 font-semibold">Recepciones del Mes</p><p id="kpi-recepciones" class="text-2xl sm:text-3xl font-bold text-blue-700 mt-1">0</p></div></div><div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><h4 class="text-lg font-bold text-gray-700 mb-2"><i class="fas fa-shield-check text-green-500 mr-2"></i> Estado de Planta: Normal</h4><p class="text-sm text-gray-500">Sistema preparado para auditorías ANMAT/SENASA.</p></div>`;
+                } else if (mod === 'trazabilidad') {
+                    viewHtml += `<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3"><h3 class="text-xl sm:text-2xl font-medium text-gray-700 hidden md:block"><i class="fas fa-project-diagram mr-2 text-amber-500"></i> ${def.title}</h3><button onclick="simularAlerta()" id="btn-alerta" class="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-red-600 hover:text-white transition flex items-center"><i class="fas fa-exclamation-triangle mr-2"></i> Simular Alerta Sanitaria</button></div><div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200 mb-5"><label class="block text-sm font-semibold text-gray-700 mb-2">Ingrese Lote de Producción a Auditar:</label><div class="flex space-x-2 max-w-md"><input type="text" id="traz-search" placeholder="Ej: LOTE-PAN-1" value="LOTE-PAN-1" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 outline-none"><button onclick="renderTrazabilidad()" class="bg-amber-500 text-white px-5 py-2 rounded text-sm font-bold shadow hover:bg-amber-600 transition">Rastrear</button></div></div><div id="trazabilidad-result" class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 min-h-[300px]"><p class="text-gray-400 italic text-sm">Haga clic en Rastrear para ver el árbol de trazabilidad.</p></div>`;
+                } else {
+                    viewHtml += `<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3"><h3 class="text-xl sm:text-2xl font-medium text-gray-700 hidden md:block">${def.title}</h3><div class="w-full sm:w-auto text-right"><button onclick="openModal('${mod}')" class="w-full sm:w-auto bg-primary text-white px-5 py-2 rounded-lg text-sm font-medium shadow-md hover:bg-secondary transition flex items-center justify-center"><i class="fas fa-plus mr-2"></i> Nuevo Registro</button></div></div>`;
+                    let filtersHtml = '';
+                    if (filterConfigs[mod]) { filtersHtml = filterConfigs[mod].map(f => { let input = `<input type="${f.type}" id="${mod}_${f.id}" class="w-full border border-gray-300 rounded px-2 sm:px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary">`; if (f.type === 'select') input = `<select id="${mod}_${f.id}" class="w-full border border-gray-300 rounded px-2 sm:px-3 py-1.5 text-sm bg-white"><option value="">Todos</option>${f.options.map(o => `<option value="${o}">${o}</option>`).join('')}</select>`; else if (f.type === 'selectDb') input = `<select id="${mod}_${f.id}" class="w-full border border-gray-300 rounded px-2 sm:px-3 py-1.5 text-sm bg-white"><option value="">Todos</option>${db[f.source].map(s => `<option value="${s[f.valKey]}">${s[f.textKey]}</option>`).join('')}</select>`; return `<div><label class="block text-[10px] sm:text-xs font-semibold text-gray-500 mb-1">${f.label}</label>${input}</div>`; }).join(''); }
+                    viewHtml += `<div class="bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200 mb-4 sm:mb-5"><div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4 items-end">${filtersHtml}</div><div class="flex justify-end border-t border-gray-100 pt-4 gap-2"><button onclick="limpiarFiltros('${mod}')" class="w-full sm:w-auto bg-gray-100 text-gray-600 border border-gray-300 px-4 py-2 rounded text-sm font-medium shadow-sm hover:bg-gray-200 transition justify-center flex items-center"><i class="fas fa-eraser mr-2"></i>Limpiar</button><button onclick="renderTable('${mod}')" class="w-full sm:w-auto bg-green-600 text-white px-6 py-2 rounded text-sm font-medium shadow hover:bg-green-700 transition justify-center flex items-center"><i class="fas fa-search mr-2"></i>Buscar</button></div></div>`;
+                    let ths = def.cols.map(c => `<th class="px-3 sm:px-4 py-2 sm:py-3 font-semibold">${c}</th>`).join('') + `<th class="px-3 sm:px-4 py-2 sm:py-3 text-right font-semibold">Acciones</th>`;
+                    viewHtml += `<div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden flex flex-col"><div class="px-4 py-3 border-b border-gray-100 bg-gray-50 flex justify-start"><button onclick="exportar()" class="bg-slate-700 text-white px-4 py-1.5 rounded text-xs font-medium shadow hover:bg-slate-800 transition flex items-center"><i class="fas fa-file-export mr-2"></i>Exportar Datos</button></div><div class="overflow-x-auto w-full"><table class="w-full text-left text-xs sm:text-sm whitespace-nowrap min-w-[600px]"><thead class="bg-gray-50 text-gray-600 border-b"><tr>${ths}</tr></thead><tbody id="tbody-${mod}" class="divide-y divide-gray-100"></tbody></table></div><div class="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between mt-auto"><span class="text-xs sm:text-sm text-gray-600">Mostrando <span id="pag-${mod}-end" class="font-bold">0</span> de <span id="pag-${mod}-total" class="font-bold">0</span></span></div></div>`;
+                }
+                viewHtml += `</div>`; container.innerHTML += viewHtml;
+            }
+        }
+
+        // ==========================================
+        // 4. LÓGICA DE TABLAS
+        // ==========================================
+        const getProvName = (id) => db.proveedores.find(p => p.id == id)?.nombre || '-';
+        const getProdName = (id) => db.productos.find(p => p.id == id)?.nombre || '-';
+        const getClientName = (id) => db.clientes.find(c => c.id == id)?.nombre || '-';
+        const getMateriaName = (id) => db.materias.find(m => m.id == id)?.nombre || '-';
+
+        function actualizarDashboard() {
+            let totalProd = db.elaboracion.length; let anulados = db.elaboracion.filter(x => x.estado === 'Anulado').length;
+            let conf = totalProd === 0 ? 100 : Math.round(((totalProd - anulados) / totalProd) * 100);
+            let bloqueadas = db.recepcion.filter(x => x.estado_recepcion === 'Rechazado').length;
+            document.getElementById('kpi-conformes').innerText = `${conf}%`; document.getElementById('kpi-bloqueadas').innerText = bloqueadas;
+            document.getElementById('kpi-anulados').innerText = anulados; document.getElementById('kpi-recepciones').innerText = db.recepcion.length;
+        }
+
+        function getFilteredData(module) {
+            let data = db[module]; const filters = filterConfigs[module]; if (!filters) return data;
+            let fVals = {}; filters.forEach(f => { fVals[f.id] = document.getElementById(`${module}_${f.id}`).value.toLowerCase(); });
+
+            return data.filter(item => {
+                let match = true;
+                if (fVals.f_desde && item.fecha_recepcion && item.fecha_recepcion < fVals.f_desde) match = false;
+                if (fVals.f_hasta && item.fecha_recepcion && item.fecha_recepcion > fVals.f_hasta) match = false;
+                if (fVals.f_desde && item.fecha_produccion && item.fecha_produccion < fVals.f_desde) match = false;
+                if (fVals.f_hasta && item.fecha_produccion && item.fecha_produccion > fVals.f_hasta) match = false;
+                if (fVals.f_desde && item.fecha && item.fecha < fVals.f_desde) match = false;
+                if (fVals.f_remito && !item.nro_remito?.toLowerCase().includes(fVals.f_remito)) match = false;
+                if (fVals.f_lote && !item.codigo_lote?.toLowerCase().includes(fVals.f_lote)) match = false;
+                if (fVals.f_orden && !item.nro_orden_cc?.toLowerCase().includes(fVals.f_orden)) match = false;
+                if (fVals.f_nombre && !item.nombre?.toLowerCase().includes(fVals.f_nombre)) match = false;
+                if (fVals.f_cuit && !item.cuit?.toLowerCase().includes(fVals.f_cuit)) match = false;
+
+                if (fVals.f_producto && document.getElementById(`${module}_f_producto`).value != item.producto_id) match = false;
+                if (fVals.f_cliente && document.getElementById(`${module}_f_cliente`).value != item.cliente_id) match = false;
+                if (fVals.f_proveedor && document.getElementById(`${module}_f_proveedor`).value != item.proveedor_id) match = false;
+                if (fVals.f_categoria && document.getElementById(`${module}_f_categoria`).value !== item.categoria) match = false;
+                if (fVals.f_tipo && document.getElementById(`${module}_f_tipo`).value !== item.tipo) match = false;
+                if (fVals.f_zona && document.getElementById(`${module}_f_zona`).value !== item.zona) match = false;
+                return match;
+            });
+        }
+
+        function limpiarFiltros(module) { filterConfigs[module].forEach(f => document.getElementById(`${module}_${f.id}`).value = ''); renderTable(module); }
+
+        function renderTable(module) {
+            if (module === 'dashboard') { actualizarDashboard(); return; }
+            if (module === 'trazabilidad') return;
+            const tbody = document.getElementById(`tbody-${module}`); if (!tbody) return;
+            const data = getFilteredData(module); tbody.innerHTML = '';
+            document.getElementById(`pag-${module}-end`).innerText = data.length; document.getElementById(`pag-${module}-total`).innerText = data.length;
+
+            if (data.length === 0) { tbody.innerHTML = `<tr><td colspan="10" class="px-4 py-6 text-center text-gray-500 italic">No hay resultados.</td></tr>`; return; }
+
+            data.forEach(item => {
+                let tr = document.createElement('tr'); tr.className = 'hover:bg-gray-50 transition-colors'; let html = ''; let rowVals = [];
+
+                if (module === 'productos') rowVals = [item.nombre, item.categoria, item.tipo, `${item.temperatura_objetiva}ºC`, `${item.vida_util_dias} días`, item.unidad_medida];
+                if (module === 'materias') rowVals = [item.nombre, item.categoria, item.tipo, item.especificacion, getProvName(item.proveedor_id)];
+                if (module === 'proveedores') rowVals = [item.nombre, item.cuit, `${item.telefono} / ${item.email}`, item.rubro, item.estado_habilitacion == '1' ? 'Activo' : 'Inactivo'];
+                if (module === 'clientes') rowVals = [item.nombre, item.cuit, item.zona, `${item.telefono} / ${item.mail}`, item.descripcion];
+
+                // Filas para módulos transaccionales (sin columna extra de detalles)
+                if (module === 'recepcion') rowVals = [item.fecha_recepcion, item.nro_remito, item.estado_recepcion, getProvName(item.proveedor_id)];
+                if (module === 'elaboracion') rowVals = [item.fecha_produccion, item.codigo_lote, getProdName(item.producto_id), item.cantidad_unidades, item.estado || 'Finalizado'];
+                if (module === 'despacho') rowVals = [item.fecha, item.nro_orden_cc, item.transporte, getClientName(item.cliente_id)];
+
+                rowVals.forEach(val => {
+                    if (val === 'Aceptado' || val === 'Finalizado') val = `<span class="bg-green-100 text-green-800 text-[10px] sm:text-xs px-2 py-1 rounded font-bold">${val}</span>`;
+                    else if (val === 'Pendiente' || val === 'Activo' || val === 'En Proceso') val = `<span class="bg-blue-100 text-blue-800 text-[10px] sm:text-xs px-2 py-1 rounded font-bold">${val}</span>`;
+                    else if (val === 'Rechazado' || val === 'Inactivo' || val === 'Anulado') val = `<span class="bg-red-100 text-red-800 text-[10px] sm:text-xs px-2 py-1 rounded font-bold">${val}</span>`;
+                    else if (val === 'Congelados') val = `<span class="bg-cyan-100 text-cyan-800 text-[10px] sm:text-xs px-2 py-1 rounded border border-cyan-200 font-medium">${val}</span>`;
+                    else if (val === 'Panificados') val = `<span class="bg-amber-100 text-amber-800 text-[10px] sm:text-xs px-2 py-1 rounded border border-amber-200 font-medium">${val}</span>`;
+                    else if (val === 'Pastelería') val = `<span class="bg-pink-100 text-pink-800 text-[10px] sm:text-xs px-2 py-1 rounded border border-pink-200 font-medium">${val}</span>`;
+
+                    /* Materias primas - Categoría */
+                    else if (val === 'Lácteos') val = `<span class="bg-blue-50 text-blue-800 text-[10px] sm:text-xs px-2 py-1 rounded border border-blue-200 font-medium">${val}</span>`;
+                    else if (val === 'Secos') val = `<span class="bg-amber-50 text-amber-800 text-[10px] sm:text-xs px-2 py-1 rounded border border-amber-200 font-medium">${val}</span>`;
+                    else if (val === 'Aditivos') val = `<span class="bg-purple-50 text-purple-800 text-[10px] sm:text-xs px-2 py-1 rounded border border-purple-200 font-medium">${val}</span>`;
+                    else if (val === 'Empaques') val = `<span class="bg-slate-50 text-slate-800 text-[10px] sm:text-xs px-2 py-1 rounded border border-slate-200 font-medium">${val}</span>`;
+
+                    /* Materias primas - Tipo */
+                    else if (val === 'Ingrediente') val = `<span class="bg-green-50 text-green-800 text-[10px] sm:text-xs px-2 py-1 rounded border border-green-200 font-medium">${val}</span>`;
+                    else if (val === 'Empaque') val = `<span class="bg-gray-50 text-gray-800 text-[10px] sm:text-xs px-2 py-1 rounded border border-gray-200 font-medium">${val}</span>`;
+                    else if (val === 'Aditivo') val = `<span class="bg-purple-50 text-purple-800 text-[10px] sm:text-xs px-2 py-1 rounded border border-purple-200 font-medium">${val}</span>`;
+                    html += `<td class="px-3 sm:px-4 py-2 sm:py-3">${val || '-'}</td>`;
+                });
+
+                let actionsHtml = '';
+                // Ojito de detalles dentro de Acciones para módulos transaccionales
+                if (module === 'recepcion' || module === 'elaboracion' || module === 'despacho') {
+                    actionsHtml += `<button onclick="openDetailModal('${module}', ${item.id})" class="text-blue-600 bg-blue-50 px-2.5 py-1 rounded border border-blue-200 hover:bg-blue-600 hover:text-white transition shadow-sm mx-1 sm:mx-2" title="Ver detalles"><i class="fas fa-eye"></i></button>`;
+                }
+                actionsHtml += `<button onclick="openModal('${module}', ${item.id})" class="text-blue-500 hover:text-blue-700 transition mx-1 sm:mx-2" title="Editar"><i class="fas fa-pencil-alt"></i></button>`;
+                actionsHtml += `<button onclick="deleteItem('${module}', ${item.id})" class="text-red-400 hover:text-red-600 transition mx-1 sm:mx-2" title="Eliminar"><i class="fas fa-trash"></i></button>`;
+
+                html += `<td class="px-3 sm:px-4 py-2 sm:py-3 text-right">${actionsHtml}</td>`;
+                tr.innerHTML = html; tbody.appendChild(tr);
+            });
+        }
+
+        // ==========================================
+        // 5. NUEVO MODAL DE DETALLES (OJITO)
+        // ==========================================
+        function openDetailModal(module, id) {
+            const item = db[module].find(x => x.id === id);
+            if (!item) return;
+
+            let headerHtml = ''; let theadHtml = ''; let tbodyHtml = '';
+
+            if (module === 'recepcion') {
+                document.getElementById('detail-title').innerHTML = `<i class="fas fa-truck-loading mr-2 text-primary"></i> Detalle de Remito: ${item.nro_remito}`;
+                headerHtml = `<div><p class="text-gray-500 text-xs">Proveedor</p><p class="font-bold text-primary">${getProvName(item.proveedor_id)}</p></div><div><p class="text-gray-500 text-xs">Fecha Rec.</p><p class="font-bold">${item.fecha_recepcion}</p></div><div><p class="text-gray-500 text-xs">Responsable</p><p class="font-bold">${item.responsable_recepcion}</p></div>`;
+                theadHtml = `<tr><th class="px-4 py-2">Materia Prima</th><th class="px-4 py-2">Lote Ingresado</th><th class="px-4 py-2">Cant. Recibida</th><th class="px-4 py-2">Obs.</th></tr>`;
+                item.detalles.forEach(d => { tbodyHtml += `<tr><td class="px-4 py-2 font-medium">${getMateriaName(d.materia_prima_id)}</td><td class="px-4 py-2"><span class="bg-gray-100 px-2 py-1 rounded border font-mono text-xs">${d.codigo_lote}</span></td><td class="px-4 py-2 font-bold">${d.cantidad_recibida}</td><td class="px-4 py-2 text-xs text-gray-500">${d.observaciones}</td></tr>`; });
+            }
+            else if (module === 'elaboracion') {
+                document.getElementById('detail-title').innerHTML = `<i class="fas fa-blender mr-2 text-amber-500"></i> Lote de Producción: ${item.codigo_lote}`;
+                headerHtml = `<div><p class="text-gray-500 text-xs">Producto Final</p><p class="font-bold text-amber-700">${getProdName(item.producto_id)}</p></div><div><p class="text-gray-500 text-xs">Unidades Prod.</p><p class="font-bold">${item.cantidad_unidades}</p></div><div><p class="text-gray-500 text-xs">Vencimiento</p><p class="font-bold">${item.fecha_vencimiento}</p></div>`;
+                theadHtml = `<tr><th class="px-4 py-2">Lotes de Materia Prima Consumidos (Lista de Materiales)</th></tr>`;
+                item.detalles.forEach(d => { tbodyHtml += `<tr><td class="px-4 py-2"><span class="bg-purple-50 text-purple-800 px-3 py-1 rounded border border-purple-200"><i class="fas fa-barcode mr-2"></i>${d.lote_materia_prima_id}</span></td></tr>`; });
+            }
+            else if (module === 'despacho') {
+                document.getElementById('detail-title').innerHTML = `<i class="fas fa-shipping-fast mr-2 text-green-600"></i> Orden de Despacho: ${item.nro_orden_cc}`;
+                headerHtml = `<div><p class="text-gray-500 text-xs">Cliente Destino</p><p class="font-bold text-green-700">${getClientName(item.cliente_id)}</p></div><div><p class="text-gray-500 text-xs">Transporte</p><p class="font-bold">${item.transporte}</p></div><div><p class="text-gray-500 text-xs">Fecha Salida</p><p class="font-bold">${item.fecha}</p></div>`;
+                theadHtml = `<tr><th class="px-4 py-2">ID Lote Producción Enviado</th><th class="px-4 py-2">Cant. Enviada</th></tr>`;
+                item.detalles.forEach(d => { tbodyHtml += `<tr><td class="px-4 py-2 font-medium">Lote Ref: ${d.lote_produccion_id}</td><td class="px-4 py-2 font-bold">${d.cantidad}</td></tr>`; });
+            }
+
+            document.getElementById('detail-header').innerHTML = headerHtml;
+            document.getElementById('detail-table-head').innerHTML = theadHtml;
+            document.getElementById('detail-table-body').innerHTML = tbodyHtml;
+            document.getElementById('detail-modal').classList.remove('hidden');
+        }
+
+        // ==========================================
+        // 6. MÓDULO ESTRELLA: TRAZABILIDAD 360 Y ALERTA
+        // ==========================================
+        let alertaActiva = false;
+        function simularAlerta() {
+            alertaActiva = !alertaActiva; const btn = document.getElementById('btn-alerta');
+            if (alertaActiva) { btn.innerHTML = `<i class="fas fa-times-circle mr-2"></i> Desactivar Alerta`; btn.classList.replace('bg-red-50', 'bg-red-600'); btn.classList.replace('text-red-600', 'text-white'); showToast("¡ALERTA SANITARIA! Harina L-889 declarada No Conforme."); }
+            else { btn.innerHTML = `<i class="fas fa-exclamation-triangle mr-2"></i> Simular Alerta Sanitaria`; btn.classList.replace('bg-red-600', 'bg-red-50'); btn.classList.replace('text-white', 'text-red-600'); showToast("Alerta sanitaria levantada."); }
+            renderTrazabilidad();
+        }
+
+        function renderTrazabilidad() {
+            const search = document.getElementById('traz-search').value.toUpperCase(); const container = document.getElementById('trazabilidad-result');
+            const loteObj = db.elaboracion.find(l => l.codigo_lote === search);
+            if (!loteObj) { container.innerHTML = `<p class="text-red-500 font-bold"><i class="fas fa-search-minus mr-2"></i>No se encontró el Lote "${search}".</p>`; return; }
+
+            let mpHtml = '';
+            loteObj.detalles.forEach(d => {
+                let mpLote = d.lote_materia_prima_id; let mpObj = db.recepcion.find(r => r.detalles.some(det => mpLote.includes(det.codigo_lote)));
+                let provName = mpObj ? getProvName(mpObj.proveedor_id) : 'Desconocido';
+                let isAlert = alertaActiva && mpLote.includes('L-889');
+                let alertClass = isAlert ? 'bg-red-100 border-red-400 text-red-800 alert-pulse font-bold' : 'bg-gray-50 border-gray-200';
+                let icon = isAlert ? '<i class="fas fa-biohazard text-red-600 mr-2"></i>' : '<i class="fas fa-box text-blue-500 mr-2"></i>';
+                mpHtml += `<div class="tree-line mt-3"><div class="p-3 border rounded-lg ${alertClass} inline-block shadow-sm"><p class="text-sm">${icon} Materia Prima: <strong>${mpLote}</strong></p><p class="text-xs text-gray-500 mt-1"><i class="fas fa-truck text-gray-400 mr-1"></i> Origen: Proveedor ${provName} (Remito ${mpObj?.nro_remito || '-'})</p>${isAlert ? '<p class="text-xs text-red-600 mt-1 font-bold">ESTADO: NO CONFORME / RECALL</p>' : ''}</div></div>`;
+            });
+
+            let despachosList = db.despacho.filter(d => d.detalles.some(det => det.lote_produccion_id === loteObj.id)); let despHtml = '';
+            if (despachosList.length === 0) despHtml = '<div class="tree-line mt-3"><p class="text-sm text-gray-500 italic p-2">Sin despachos registrados (En Stock)</p></div>';
+            despachosList.forEach(desp => {
+                let clientName = getClientName(desp.cliente_id); let alertClass = alertaActiva ? 'bg-orange-50 border-orange-300 text-orange-800' : 'bg-gray-50 border-gray-200';
+                despHtml += `<div class="tree-line mt-3"><div class="p-3 border rounded-lg ${alertClass} inline-block shadow-sm"><p class="text-sm"><i class="fas fa-store text-green-600 mr-2"></i> Despachado a: <strong>${clientName}</strong></p><p class="text-xs text-gray-500 mt-1"><i class="fas fa-file-invoice text-gray-400 mr-1"></i> Orden CC: ${desp.nro_orden_cc} (Fecha: ${desp.fecha})</p>${alertaActiva ? '<p class="text-xs text-orange-600 mt-1 font-bold"><i class="fas fa-phone-alt"></i> CONTACTAR CLIENTE INMEDIATAMENTE</p>' : ''}</div></div>`;
+            });
+
+            let headAlert = alertaActiva ? 'bg-red-600 text-white alert-pulse' : 'bg-primary text-white';
+            container.innerHTML = `<div class="mb-4 p-4 rounded-lg shadow-md ${headAlert}"><h4 class="text-lg font-bold"><i class="fas fa-cubes mr-2"></i> Lote de Producción: ${loteObj.codigo_lote}</h4><p class="text-sm opacity-90 mt-1">Producto: ${getProdName(loteObj.producto_id)} | Fecha: ${loteObj.fecha_produccion} | Responsable: ${loteObj.responsable}</p></div><div class="pl-4"><h5 class="font-bold text-gray-700 mt-4 border-b pb-2"><i class="fas fa-arrow-left text-blue-400 mr-2"></i> Trazabilidad Hacia Atrás (Insumos Usados)</h5>${mpHtml}<h5 class="font-bold text-gray-700 mt-8 border-b pb-2"><i class="fas fa-arrow-right text-green-500 mr-2"></i> Trazabilidad Hacia Adelante (Destino)</h5>${despHtml}</div>`;
+        }
+
+        // ==========================================
+        // CRUD ESQUEMAS
+        // ==========================================
+        const schemas = {
+            productos: { f: [{ n: 'nombre', l: 'Nombre Producto' }, { n: 'categoria', l: 'Categoría', t: 'select', o: ['Congelados', 'Panificados', 'Pastelería', 'Secos'] }, { n: 'tipo', l: 'Tipo', t: 'select', o: ['Producto Final', 'Semielaborado', 'Subproducto'] }, { n: 'temperatura_objetiva', l: 'Temp. Objetiva (ºC)', t: 'number' }, { n: 'vida_util_dias', l: 'Vida Útil (Días)', t: 'number' }, { n: 'unidad_medida', l: 'Unidad Medida', t: 'select', o: ['Kg', 'Lts', 'Unidades'] }] },
+            materias: { f: [{ n: 'nombre', l: 'Nombre de M.P.' }, { n: 'categoria', l: 'Categoría', t: 'select', o: ['Lácteos', 'Secos', 'Aditivos', 'Empaques'] }, { n: 'tipo', l: 'Tipo', t: 'select', o: ['Ingrediente', 'Empaque'] }, { n: 'especificacion', l: 'Especificación Técnica' }, { n: 'unidad_medida', l: 'Unidad Medida', t: 'select', o: ['Kg', 'Lts', 'Unidades'] }, { n: 'temperatura_objetiva', l: 'Temp. Objetiva (ºC)', t: 'number' }, { n: 'proveedor_id', l: 'Proveedor Relacionado', t: 'selectDb', s: 'proveedores', k: 'id', l2: 'nombre' }] },
+            proveedores: { f: [{ n: 'nombre', l: 'Razón Social' }, { n: 'cuit', l: 'CUIT' }, { n: 'direccion', l: 'Dirección' }, { n: 'telefono', l: 'Teléfono' }, { n: 'email', l: 'Email' }, { n: 'rubro', l: 'Rubro', t: 'select', o: ['Harinas y Cereales', 'Lácteos', 'Empaques', 'Insumos Varios'] }, { n: 'estado_habilitacion', l: 'Estado Hab.', t: 'select', o: ['1', '0'] }] },
+            clientes: { f: [{ n: 'nombre', l: 'Nombre Cliente' }, { n: 'cuit', l: 'CUIT' }, { n: 'zona', l: 'Zona Logística', t: 'select', o: ['Norte', 'Sur', 'Este', 'Oeste', 'Centro'] }, { n: 'direccion', l: 'Calle' }, { n: 'numero', l: 'Número' }, { n: 'mail', l: 'Email' }, { n: 'telefono', l: 'Teléfono' }, { n: 'descripcion', l: 'Descripción' }] },
+            recepcion: { f: [{ n: 'nro_remito', l: 'Nº Remito' }, { n: 'fecha_recepcion', l: 'Fecha Recepción', t: 'date' }, { n: 'estado_recepcion', l: 'Estado', t: 'select', o: ['Pendiente', 'Aceptado', 'Rechazado'] }, { n: 'responsable_recepcion', l: 'Responsable' }, { n: 'observaciones', l: 'Observaciones' }, { n: 'proveedor_id', l: 'Proveedor', t: 'selectDb', s: 'proveedores', k: 'id', l2: 'nombre' }], hasItems: true, cols: [{ n: 'materia_prima_id', l: 'Materia Prima', t: 'selectDb', s: 'materias', k: 'id', l2: 'nombre' }, { n: 'codigo_lote', l: 'Lote' }, { n: 'cantidad_recibida', l: 'Cant.', t: 'number' }] },
+            elaboracion: { f: [{ n: 'codigo_lote', l: 'Nº Lote Prod.' }, { n: 'fecha_produccion', l: 'Fecha Prod.', t: 'date' }, { n: 'fecha_vencimiento', l: 'Fecha Vto.', t: 'date' }, { n: 'responsable', l: 'Responsable' }, { n: 'cantidad_unidades', l: 'Cant.', t: 'number' }, { n: 'producto_id', l: 'Producto Final', t: 'selectDb', s: 'productos', k: 'id', l2: 'nombre' }], hasItems: true, cols: [{ n: 'lote_materia_prima_id', l: 'Lote M.P. Consumida' }] },
+            despacho: { f: [{ n: 'nro_orden_cc', l: 'Orden CC' }, { n: 'transporte', l: 'Transporte' }, { n: 'fecha', l: 'Fecha Despacho', t: 'date' }, { n: 'cliente_id', l: 'Cliente', t: 'selectDb', s: 'clientes', k: 'id', l2: 'nombre' }], hasItems: true, cols: [{ n: 'lote_produccion_id', l: 'ID Lote', t: 'number' }, { n: 'cantidad', l: 'Cant.', t: 'number' }] }
+        };
+
+        function openModal(module, id = null) {
+            document.getElementById('modal-module').value = module; document.getElementById('modal-id').value = id || '';
+            document.getElementById('modal-title').innerText = id ? `Editar - ${viewDefinitions[module].title}` : `Nuevo - ${viewDefinitions[module].title}`;
+            const auditDiv = document.getElementById('audit-footer');
+            if (id) { auditDiv.classList.remove('hidden'); document.getElementById('audit-date').innerText = new Date().toLocaleDateString(); } else { auditDiv.classList.add('hidden'); }
+            const sch = schemas[module]; const fc = document.getElementById('modal-fields'); fc.innerHTML = '';
+            let itemData = id ? db[module].find(x => x.id === id) : null;
+            sch.f.forEach(f => {
+                let val = itemData && itemData[f.n] ? itemData[f.n] : ''; let inp = `<input type="${f.t || 'text'}" name="${f.n}" value="${val}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">`;
+                if (f.t === 'select') inp = `<select name="${f.n}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-primary">${f.o.map(o => `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+                if (f.t === 'selectDb') inp = `<select name="${f.n}" class="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-primary">${db[f.s].map(x => `<option value="${x[f.k]}" ${val == x[f.k] ? 'selected' : ''}>${x[f.l2]}</option>`).join('')}</select>`;
+                fc.innerHTML += `<div><label class="block text-xs font-semibold text-gray-600 mb-1">${f.l}</label>${inp}</div>`;
+            });
+            const ic = document.getElementById('modal-items-container'); const tbody = document.getElementById('items-tbody');
+            if (sch.hasItems) {
+                ic.classList.remove('hidden'); document.getElementById('items-thead').innerHTML = `<tr>${sch.cols.map(c => `<th class="px-2 sm:px-4 py-2 font-medium">${c.l}</th>`).join('')}<th class="px-2 sm:px-4 py-2 text-right"></th></tr>`;
+                tbody.innerHTML = ''; if (itemData && itemData.detalles) itemData.detalles.forEach(d => addDetailRow(d)); else addDetailRow();
+            } else ic.classList.add('hidden');
+            document.getElementById('crud-modal').classList.remove('hidden');
+        }
+
+        function addDetailRow(rowData = {}) {
+            const mod = document.getElementById('modal-module').value; const tr = document.createElement('tr');
+            let html = schemas[mod].cols.map(c => {
+                let val = rowData[c.n] || ''; let input = `<input type="${c.t || 'text'}" name="item_${c.n}[]" value="${val}" class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs sm:text-sm outline-none focus:border-primary min-w-[80px]">`;
+                if (c.t === 'selectDb') input = `<select name="item_${c.n}[]" class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs sm:text-sm bg-white outline-none min-w-[120px]">${db[c.s].map(x => `<option value="${x[c.k]}" ${val == x[c.k] ? 'selected' : ''}>${x[c.l2]}</option>`).join('')}</select>`;
+                return `<td class="px-1 sm:px-2 py-1.5">${input}</td>`;
+            }).join('');
+            html += `<td class="px-1 sm:px-2 py-1.5 text-right"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600 p-1"><i class="fas fa-times"></i></button></td>`;
+            tr.innerHTML = html; document.getElementById('items-tbody').appendChild(tr);
+        }
+
+        function saveData(e) {
+            e.preventDefault(); const fd = new FormData(e.target); const mod = document.getElementById('modal-module').value; const idStr = document.getElementById('modal-id').value;
+            let item = {}; schemas[mod].f.forEach(f => { item[f.n] = fd.get(f.n); });
+            if (schemas[mod].hasItems) {
+                item.detalles = []; const cNames = schemas[mod].cols.map(c => c.n); const len = fd.getAll(`item_${cNames[0]}[]`).length;
+                for (let i = 0; i < len; i++) { let d = {}; cNames.forEach(c => d[c] = fd.getAll(`item_${c}[]`)[i]); item.detalles.push(d); }
+            }
+            if (idStr) { let idNum = parseInt(idStr); let index = db[mod].findIndex(x => x.id === idNum); item.id = idNum; db[mod][index] = item; showToast('Registro auditado y actualizado'); }
+            else { item.id = Date.now(); db[mod].push(item); showToast('Registro creado (Autor: admin)'); }
+            closeModal('crud-modal'); renderTable(mod);
+        }
+
+        function deleteItem(module, id) { if (confirm('¿Eliminar registro permanentemente? Esta acción queda auditada.')) { db[module] = db[module].filter(x => x.id !== id); renderTable(module); showToast('Eliminado'); } }
+
+        function navigate(viewId, btnElement) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active')); document.getElementById(viewId).classList.add('active');
+            const titleEl = document.getElementById('page-title'); if (titleEl && viewDefinitions[viewId]) titleEl.innerText = viewDefinitions[viewId].title;
+            document.querySelectorAll('.menu-btn').forEach(btn => { btn.classList.remove('bg-secondary', 'text-white', 'text-amber-100', 'border-amber-500/30'); btn.classList.add('text-gray-300'); });
+            if (viewId === 'trazabilidad') { btnElement.classList.add('bg-secondary', 'text-amber-100', 'border-amber-500/30'); btnElement.classList.remove('text-gray-300'); }
+            else { btnElement.classList.add('bg-secondary', 'text-white'); btnElement.classList.remove('text-gray-300'); }
+            if (window.innerWidth < 768 && !document.getElementById('sidebar').classList.contains('-translate-x-full')) toggleSidebar();
+            renderTable(viewId);
+        }
+
+        function showToast(message) { const toast = document.getElementById('toast'); document.getElementById('toast-msg').innerText = message; toast.classList.remove('translate-x-full', 'opacity-0'); setTimeout(() => toast.classList.add('translate-x-full', 'opacity-0'), 3500); }
+        initViews(); for (let mod in viewDefinitions) { renderTable(mod); }
+    </script>
+</body>
+
+</html>

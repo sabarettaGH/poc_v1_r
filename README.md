@@ -1,6 +1,6 @@
 # 🍃 NutriTrace - Sistema de Trazabilidad e Higiene Alimentaria
 
-![Estado](https://img.shields.io/badge/Estado-POC_Funcional-success)
+![Estado](https://img.shields.io/badge/Estado-POC_Enterprise_V5-success)
 ![Tecnología](https://img.shields.io/badge/Tecnolog%C3%ADa-HTML5_%7C_Tailwind_CSS_%7C_Vanilla_JS-blue)
 ![Despliegue](https://img.shields.io/badge/Despliegue-GitHub_Pages-black)
 
@@ -8,7 +8,7 @@
 
 Puedes probar la versión funcional e interactiva del prototipo directamente desde tu navegador, sin necesidad de instalaciones:
 
-👉 **[Probar NutriTrace (GitHub Pages)](pocv3_r.html)**
+👉 **[Probar NutriTrace (GitHub Pages)](https://sabarettagh.github.io/poc_v1_r/poc_v1.html)**
 
 ---
 
@@ -18,23 +18,50 @@ Puedes probar la versión funcional e interactiva del prototipo directamente des
 
 El sistema garantiza una **trazabilidad completa** (hacia atrás, interna y hacia adelante) cumpliendo con los estándares de control sanitario, permitiendo auditar qué lote de materia prima se utilizó en cada producto final y a qué cliente fue despachado.
 
-### 🏭 Módulos Principales
+**Diseñado con un enfoque en la reducción de riesgos, el orden y el control.**
 
-- **📊 Dashboard Operativo:** KPIs en tiempo real (Lotes producidos, recepciones, insumos físicos).
-- **📦 Recepción (Inventario Físico):** Registro de ingresos de proveedores con validación de remitos, lotes de origen y fechas de vencimiento.
-- **blender Elaboración (Producción):** Generación de Lotes de Producción consumiendo dinámicamente el stock físico de materias primas disponible (Lista de Materiales).
-- **🚚 Despachos (Logística):** Salida de mercadería vinculando los lotes de producción terminados con los clientes de destino.
-- **📇 Administración (Master Data):** Catálogos y directorios de Productos, Materias Primas, Proveedores y Clientes.
+### 🌟 Valor Agregado (Control Sanitario)
+
+- **Trazabilidad 360º (Módulo Estrella):** Visualización en forma de árbol que permite rastrear, con un solo clic, el origen exacto (proveedor/remito) de los insumos de un lote y su destino final (clientes/despachos).
+- **Simulación de Alertas Sanitarias:** Capacidad de simular un "Recall" (bloqueo de materia prima) e identificar inmediatamente qué lotes de producción y clientes se encuentran en riesgo.
+- **KPIs Estratégicos:** El dashboard muestra indicadores críticos para la gestión: _% de Lotes Conformes_, _Materias Primas Rechazadas_, _Lotes Anulados_ y _Recepciones Mensuales_.
+
+### 🏭 Módulos Operativos (Transaccionales)
+
+- **📦 Recepciones:** Registro de ingresos con validación de estado (Aceptado/Rechazado) y detalle preciso de lotes recibidos.
+- **blender Lotes de Producción:** Generación de lotes consumiendo el stock físico disponible mediante Listas de Materiales (BOM).
+- **🚚 Despachos:** Salida de mercadería vinculando los lotes terminados con los clientes y el transporte.
+- _(Nota UX)_: Implementación del patrón **Maestro-Detalle** con modales de lectura limpios ("Ver Detalles") para evitar la sobrecarga visual en las tablas principales.
+
+### 📇 Módulos de Administración (Catálogos)
+
+- **Productos:** Catálogo con control de temperatura objetiva, vida útil y categorización.
+- **Materias Primas:** Diccionario de insumos clasificados por tipo y categoría, vinculados a su proveedor de origen.
+- **Proveedores y Clientes:** Directorios completos con validación de CUIT, rubros y zonas logísticas.
 
 ---
 
 ## ⚙️ Características Técnicas del Prototipo
 
-Este POC fue construido priorizando la velocidad de validación visual y funcional (Nivel 3).
+Este POC fue construido priorizando la velocidad de validación visual y funcional, simulando el comportamiento de un ERP robusto.
 
-- **Frontend Responsivo:** Diseñado con el enfoque _Mobile-First_. Incluye menú "Off-Canvas" (Hamburguesa) para uso en tablets o celulares por parte de operarios de planta.
-- **Motor Dinámico (Vanilla JS):** Base de datos en memoria y generación automática de vistas y formularios (CRUD).
-- **Filtros Avanzados:** Buscadores dinámicos por módulo y sincronización de datos relacionales (ej. Proveedor -> Oferta de Insumos).
-- **Cero Dependencias:** Utiliza Tailwind CSS vía CDN. No requiere Node.js, Webpack ni configuración de servidores para ejecutarse.
+- **Sincronización con Base de Datos:** Los formularios y tablas reflejan fielmente el esquema relacional (`v1_initial_schema.sql`).
+- **Frontend Responsivo (Mobile-Ready):** Interfaz fluida con Menú Lateral "Off-Canvas" (Hamburguesa) ideal para tablets y móviles en planta.
+- **Filtros Inteligentes y Selectores:** Búsqueda avanzada por módulo y selectores dinámicos para evitar errores de tipeo en rubros y categorías.
+- **Auditoría Silenciosa:** Registro simulado de creación y modificación de datos para transmitir seguridad y trazabilidad en las operaciones.
+- **Cero Dependencias Backend:** Motor en memoria (Vanilla JS) y Tailwind CSS vía CDN. No requiere servidores para su ejecución.
 
 ---
+
+## 🗺️ Roadmap y Módulos Sugeridos
+
+La arquitectura final del producto contemplará:
+
+- **Backend:** Spring Boot 3.5 (Java 17+), Spring Data JPA, MySQL/PostgreSQL.
+- **Frontend:** Angular 19/20 usando Standalone Components.
+
+**Módulos Sugeridos (Próximamente):**
+
+- 📐Trazabilidad 360°.
+- 📄 Generación de Reportes.
+- 🕵️ Auditoría de Eventos (Logs del sistema).
